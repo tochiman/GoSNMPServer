@@ -22,11 +22,12 @@ func makeApp() *cli.App {
 				Flags: []cli.Flag{
 					&cli.StringFlag{Name: "logLevel", Value: "info"},
 					&cli.StringFlag{Name: "community", Value: "public"},
-					&cli.StringFlag{Name: "bindTo", Value: "127.0.0.1:1161"},
+					&cli.StringFlag{Name: "bindTo", Value: "localhost:1161"},
 					&cli.StringFlag{Name: "v3Username", Value: "testuser"},
 					&cli.StringFlag{Name: "v3AuthenticationPassphrase", Value: "testauth"},
 					&cli.StringFlag{Name: "v3PrivacyPassphrase", Value: "testpriv"},
 					&cli.BoolFlag{Name: "v3Only", Value: false},
+					&cli.BoolFlag{Name: "quicMode", Usage: "Listening with QUIC", Value: false},
 				},
 				Action: runServer,
 			},
@@ -59,7 +60,7 @@ func runServer(c *cli.Context) error {
 		Logger: logger,
 		SecurityConfig: GoSNMPServer.SecurityConfig{
 			AuthoritativeEngineBoots: 1,
-			SnmpV3Only:                   c.Bool("v3Only"),
+			SnmpV3Only:               c.Bool("v3Only"),
 			Users: []gosnmp.UsmSecurityParameters{
 				{
 					UserName:                 c.String("v3Username"),
@@ -78,8 +79,6 @@ func runServer(c *cli.Context) error {
 		},
 	}
 
-
-
 	logger.Infof("V3 Users:")
 	for _, val := range master.SecurityConfig.Users {
 		logger.Infof(
@@ -92,10 +91,19 @@ func runServer(c *cli.Context) error {
 		)
 	}
 	server := GoSNMPServer.NewSNMPServer(master)
-	err := server.ListenUDP("udp", c.String("bindTo"))
-	if err != nil {
-		logger.Errorf("Error in listen: %+v", err)
+	if c.Bool("quicMode") == true {
+		err := server.ListenQUIC(c.String("bindTo"), GoSNMPServer.GenerateTLSConfig())
+		if err != nil {
+			logger.Error("Error in listen: %+v", err)
+		}
+		server.ServeForever()
+		return nil
+	} else {
+		err := server.ListenUDP("udp", c.String("bindTo"))
+		if err != nil {
+			logger.Errorf("Error in listen: %+v", err)
+		}
+		server.ServeForever()
+		return nil
 	}
-	server.ServeForever()
-	return nil
 }
