@@ -28,6 +28,8 @@ func makeApp() *cli.App {
 					&cli.StringFlag{Name: "v3PrivacyPassphrase", Value: "testpriv"},
 					&cli.BoolFlag{Name: "v3Only", Value: false},
 					&cli.BoolFlag{Name: "quicMode", Usage: "Listening with QUIC", Value: false},
+					&cli.StringFlag{Name: "certPEM", Usage: "Specify FilePath of certPEM", Value: "localhost/cert.pem"},
+					&cli.StringFlag{Name: "keyPEM", Usage: "Specify FilePath of keyPEM", Value: "localhost/key.pem"},
 				},
 				Action: runServer,
 			},
@@ -92,11 +94,11 @@ func runServer(c *cli.Context) error {
 	}
 	server := GoSNMPServer.NewSNMPServer(master)
 	if c.Bool("quicMode") == true {
-		err := server.ListenQUIC(c.String("bindTo"), GoSNMPServer.GenerateTLSConfig())
+		err := server.ListenQUIC(c.String("bindTo"), GoSNMPServer.GenerateTLSConfig(c.String("certPEM"), c.String("keyPEM")))
 		if err != nil {
 			logger.Error("Error in listen: %+v", err)
 		}
-		server.ServeForever()
+		// server.ServeForever()
 		return nil
 	} else {
 		err := server.ListenUDP("udp", c.String("bindTo"))

@@ -3,31 +3,40 @@ package GoSNMPServer
 import (
 	"context"
 	"crypto/tls"
+	"log"
 	"net"
 
 	"github.com/pkg/errors"
 
-	"github.com/quic-go/quic-go"
+	q "github.com/quic-go/quic-go"
 )
 
 type QUICListener struct {
-	conn   quic.Connection
+	conn   q.Connection
 	logger ILogger
 }
 
-func NewQUICListener(address string, tlsConfig *tls.Config) (ISnmpServerListener, error) {
+// func NewQUICListener(address string, tlsConfig *tls.Config) (ISnmpServerListener, error) {
+func NewQUICListener(address string, tlsConfig *tls.Config) (<-chan ISnmpServerListener, error) {
 	ret := new(QUICListener)
 	ret.logger = NewDefaultLogger()
-	listener, err := quic.ListenAddr(address, tlsConfig, nil)
+	listener, err := q.ListenAddr(address, tlsConfig, nil)
 	if err != nil {
 		return nil, errors.Wrap(err, "[QUIC]ListenAddr Error")
 	}
-	conn, err := listener.Accept(context.Background())
-	if err != nil {
-		return nil, errors.Wrap(err, "Error Accepting Connection")
-	}
-	ret.conn = conn
-	return ret, nil
+	serverChan := make(chan ISnmpServerListener)
+	go func() {
+		for {
+			conn, err := listener.Accept(context.Background())
+			if err != nil {
+				log.Fatalln("Error Accepting Connection", err)
+				continue
+			}
+			ret.conn = conn
+			serverChan <- ret
+		}
+	}()
+	return serverChan, nil
 }
 
 func (quic *QUICListener) SetupLogger(i ILogger) {
@@ -48,12 +57,13 @@ func (quic *QUICListener) NextSnmp() ([]byte, IReplyer, error) {
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "[QUIC]AcceptStream Error")
 	}
+
 	counts, err := stream.Read(msg[:])
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "[QUIC]Can't Read Stream")
 	}
 	quic.logger.Infof("quic request from %v. size=%v", remoteAddr, counts)
-	return msg[:counts], &QUICReplyer{remoteAddr, quic.conn}, nil
+	return msg[:counts], &QUICReplyer{remoteAddr, quic.conn, stream}, nil
 }
 
 func (quic *QUICListener) Shutdown() {
@@ -65,23 +75,18 @@ func (quic *QUICListener) Shutdown() {
 
 type QUICReplyer struct {
 	target net.Addr
-	conn   quic.Connection
+	conn   q.Connection
+	stream q.Stream
 }
 
 func (r *QUICReplyer) ReplyPDU(i []byte) error {
-	conn := r.conn
-	stream, err := conn.OpenStreamSync(context.Background())
-	if err != nil {
-		return errors.Wrap(err, "[QUIC]OpenStreamSync Error")
-	}
-	_, err = stream.Write(i)
+	var err error
+
+	_, err = r.stream.Write(i)
 	if err != nil {
 		return errors.Wrap(err, "[QUIC]Can't Write Stream")
 	}
-	err = stream.Close()
-	if err != nil {
-		return errors.Wrap(err, "[QUIC]Can't Close Stream")
-	}
+
 	return nil
 }
 

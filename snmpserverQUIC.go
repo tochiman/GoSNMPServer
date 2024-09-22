@@ -10,12 +10,18 @@ func (server *SNMPServer) ListenQUIC(address string, tlsConfig *tls.Config) erro
 	if server.wconnStream != nil {
 		return errors.New("Listened")
 	}
-	i, err := NewQUICListener(address, tlsConfig)
+	connectionChan, err := NewQUICListener(address, tlsConfig)
 	if err != nil {
 		return err
 	}
-	server.logger.Infof("ListenQUIC: address=%s", address)
-	i.SetupLogger(server.logger)
-	server.wconnStream = i
+	for conn := range connectionChan {
+		go func() {
+			server.logger.Infof("ListenQUIC: address=%s", address)
+
+			conn.SetupLogger(server.logger)
+			server.wconnStream = conn
+			server.ServeForever()
+		}()
+	}
 	return nil
 }
