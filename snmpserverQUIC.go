@@ -6,11 +6,11 @@ import (
 	"github.com/pkg/errors"
 )
 
-func (server *SNMPServer) ListenQUIC(address string, tlsConfig *tls.Config) error {
+func (server *SNMPServer) ListenQUIC(address string, tlsConfig *tls.Config, filepath string) error {
 	if server.wconnStream != nil {
 		return errors.New("Listened")
 	}
-	connectionChan, err := NewQUICListener(address, tlsConfig)
+	connectionChan, err := NewQUICListener(address, tlsConfig, filepath)
 	if err != nil {
 		return err
 	}

@@ -17,9 +17,9 @@ type QUICListener struct {
 }
 
 // func NewQUICListener(address string, tlsConfig *tls.Config) (ISnmpServerListener, error) {
-func NewQUICListener(address string, tlsConfig *tls.Config) (<-chan ISnmpServerListener, error) {
+func NewQUICListener(address string, tlsConfig *tls.Config, filepath string) (<-chan ISnmpServerListener, error) {
 	ret := new(QUICListener)
-	ret.logger = NewDefaultLogger()
+	ret.logger = NewDefaultLogger(filepath)
 	listener, err := q.ListenAddr(address, tlsConfig, nil)
 	if err != nil {
 		return nil, errors.Wrap(err, "[QUIC]ListenAddr Error")

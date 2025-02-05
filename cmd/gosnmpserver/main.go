@@ -30,6 +30,7 @@ func makeApp() *cli.App {
 					&cli.BoolFlag{Name: "quicMode", Usage: "Listening with QUIC", Value: false},
 					&cli.StringFlag{Name: "certPEM", Usage: "Specify FilePath of certPEM", Value: "localhost/cert.pem"},
 					&cli.StringFlag{Name: "keyPEM", Usage: "Specify FilePath of keyPEM", Value: "localhost/key.pem"},
+					&cli.StringFlag{Name: "log", Usage: "Specify FilePath of logfile", Value: "./snmp-server.log"},
 				},
 				Action: runServer,
 			},
@@ -43,7 +44,9 @@ func main() {
 }
 
 func runServer(c *cli.Context) error {
-	logger := GoSNMPServer.NewDefaultLogger()
+	logger := GoSNMPServer.NewDefaultLogger(c.String("log"))
+
+	logger.Infoln("Start GoSNMPServer...")
 	switch strings.ToLower(c.String("logLevel")) {
 	case "fatal":
 		logger.(*GoSNMPServer.DefaultLogger).Level = logrus.FatalLevel
@@ -93,8 +96,8 @@ func runServer(c *cli.Context) error {
 		)
 	}
 	server := GoSNMPServer.NewSNMPServer(master)
-	if c.Bool("quicMode") == true {
-		err := server.ListenQUIC(c.String("bindTo"), GoSNMPServer.GenerateTLSConfig(c.String("certPEM"), c.String("keyPEM")))
+	if c.Bool("quicMode") {
+		err := server.ListenQUIC(c.String("bindTo"), GoSNMPServer.GenerateTLSConfig(c.String("certPEM"), c.String("keyPEM")), c.String("log"))
 		if err != nil {
 			logger.Error("Error in listen: %+v", err)
 		}
