@@ -4,6 +4,7 @@ import (
 	"net"
 	"reflect"
 
+	"github.com/gosnmp/gosnmp"
 	"github.com/pkg/errors"
 )
 
@@ -11,6 +12,7 @@ type SNMPServer struct {
 	wconnStream ISnmpServerListener
 	master      MasterAgent
 	logger      ILogger
+	snmp        *gosnmp.GoSNMP
 }
 
 func NewSNMPServer(master MasterAgent) *SNMPServer {
@@ -20,6 +22,7 @@ func NewSNMPServer(master MasterAgent) *SNMPServer {
 	}
 	ret.master = master
 	ret.logger = master.Logger
+	ret.snmp = master.Snmp
 	return ret
 }
 
@@ -27,7 +30,7 @@ func (server *SNMPServer) ListenUDP(l3proto, address string) error {
 	if server.wconnStream != nil {
 		return errors.New("Listened")
 	}
-	i, err := NewUDPListener(l3proto, address)
+	i, err := NewUDPListener(l3proto, address, server.snmp)
 	if err != nil {
 		return err
 	}

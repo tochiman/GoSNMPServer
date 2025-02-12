@@ -79,3 +79,5 @@ gosnmpserver
 
 # Certificate files (for QUIC)
 cert/
+
+snmp-server.log

@@ -5,20 +5,24 @@ import (
 	"crypto/tls"
 	"log"
 	"net"
+	"strconv"
 
+	"github.com/gosnmp/gosnmp"
 	"github.com/pkg/errors"
 
 	q "github.com/quic-go/quic-go"
 )
 
 type QUICListener struct {
-	conn   q.Connection
-	logger ILogger
+	conn       q.Connection
+	logger     ILogger
+	snmpserver *gosnmp.GoSNMP
 }
 
 // func NewQUICListener(address string, tlsConfig *tls.Config) (ISnmpServerListener, error) {
-func NewQUICListener(address string, tlsConfig *tls.Config, filepath string) (<-chan ISnmpServerListener, error) {
+func NewQUICListener(address string, tlsConfig *tls.Config, filepath string, server *gosnmp.GoSNMP) (<-chan ISnmpServerListener, error) {
 	ret := new(QUICListener)
+	ret.snmpserver = server
 	ret.logger = NewDefaultLogger(filepath)
 	listener, err := q.ListenAddr(address, tlsConfig, nil)
 	if err != nil {
@@ -63,6 +67,30 @@ func (quic *QUICListener) NextSnmp() ([]byte, IReplyer, error) {
 		return nil, nil, errors.Wrap(err, "[QUIC]Can't Read Stream")
 	}
 	quic.logger.Infof("quic request from %v. size=%v", remoteAddr, counts)
+
+	host, port, err := net.SplitHostPort(remoteAddr.String())
+	if err != nil {
+		return nil, nil, errors.Wrap(err, "[QUIC]SplitHostPort Error")
+	}
+	portConv, err := strconv.Atoi(port)
+	if err != nil {
+		return nil, nil, errors.Wrap(err, "[QUIC]Strconv.Atoi Error")
+	}
+
+	quic.snmpserver.Target = host
+	quic.snmpserver.Port = uint16(portConv)
+
+	sP, err := quic.snmpserver.SnmpDecodePacket(msg[:counts])
+	if err != nil {
+		return nil, nil, errors.Wrap(err, "[QUIC]SNMPDecodePacket Error")
+	}
+	var oids []string
+	for _, vb := range sP.Variables {
+		oids = append(oids, vb.Name)
+
+	}
+	quic.logger.Infof("quic request: %v", oids)
+
 	return msg[:counts], &QUICReplyer{remoteAddr, quic.conn, stream}, nil
 }
 

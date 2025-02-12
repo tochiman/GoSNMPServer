@@ -26,6 +26,8 @@ type MasterAgent struct {
 		communityToSubAgent map[string]*SubAgent
 		defaultSubAgent     *SubAgent
 	}
+
+	Snmp *gosnmp.GoSNMP
 }
 
 type SecurityConfig struct {
@@ -130,6 +132,11 @@ func (t *MasterAgent) ResponseForBuffer(i []byte) ([]byte, error) {
 	mb, _ := t.getUsmSecurityParametersFromUser("")
 	vhandle.SecurityParameters = mb
 	request, decodeError := vhandle.SnmpDecodePacket(i)
+
+	pdus := []gosnmp.SnmpPDU{}
+	for _, vb := range request.Variables {
+		pdus = append(pdus, vb)
+	}
 
 	switch request.Version {
 	case gosnmp.Version1, gosnmp.Version2c:

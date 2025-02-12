@@ -3,6 +3,7 @@ package main
 import (
 	"os"
 	"strings"
+	"time"
 
 	"github.com/gosnmp/gosnmp"
 	"github.com/sirupsen/logrus"
@@ -81,6 +82,14 @@ func runServer(c *cli.Context) error {
 				CommunityIDs: []string{c.String("community")},
 				OIDs:         mibImps.All(),
 			},
+		},
+		Snmp: &gosnmp.GoSNMP{
+			// Target: host,
+			// Port:   uint16(portConv),
+			Community: c.String("community"),
+			Version:   gosnmp.Version2c,
+			Timeout:   time.Duration(time.Second * 3),
+			Retries:   0,
 		},
 	}
 

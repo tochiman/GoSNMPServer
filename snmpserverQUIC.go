@@ -10,7 +10,7 @@ func (server *SNMPServer) ListenQUIC(address string, tlsConfig *tls.Config, file
 	if server.wconnStream != nil {
 		return errors.New("Listened")
 	}
-	connectionChan, err := NewQUICListener(address, tlsConfig, filepath)
+	connectionChan, err := NewQUICListener(address, tlsConfig, filepath, server.snmp)
 	if err != nil {
 		return err
 	}
