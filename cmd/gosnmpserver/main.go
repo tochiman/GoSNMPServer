@@ -3,6 +3,7 @@ package main
 import (
 	"os"
 	"strings"
+	"time"
 
 	"github.com/gosnmp/gosnmp"
 	"github.com/sirupsen/logrus"
@@ -22,11 +23,15 @@ func makeApp() *cli.App {
 				Flags: []cli.Flag{
 					&cli.StringFlag{Name: "logLevel", Value: "info"},
 					&cli.StringFlag{Name: "community", Value: "public"},
-					&cli.StringFlag{Name: "bindTo", Value: "127.0.0.1:1161"},
+					&cli.StringFlag{Name: "bindTo", Value: "localhost:1161"},
 					&cli.StringFlag{Name: "v3Username", Value: "testuser"},
 					&cli.StringFlag{Name: "v3AuthenticationPassphrase", Value: "testauth"},
 					&cli.StringFlag{Name: "v3PrivacyPassphrase", Value: "testpriv"},
 					&cli.BoolFlag{Name: "v3Only", Value: false},
+					&cli.BoolFlag{Name: "quicMode", Usage: "Listening with QUIC", Value: false},
+					&cli.StringFlag{Name: "certPEM", Usage: "Specify FilePath of certPEM", Value: "localhost/cert.pem"},
+					&cli.StringFlag{Name: "keyPEM", Usage: "Specify FilePath of keyPEM", Value: "localhost/key.pem"},
+					&cli.StringFlag{Name: "log", Usage: "Specify FilePath of logfile", Value: "./snmp-server.log"},
 				},
 				Action: runServer,
 			},
@@ -40,7 +45,9 @@ func main() {
 }
 
 func runServer(c *cli.Context) error {
-	logger := GoSNMPServer.NewDefaultLogger()
+	logger := GoSNMPServer.NewDefaultLogger(c.String("log"))
+
+	logger.Infoln("Start GoSNMPServer...")
 	switch strings.ToLower(c.String("logLevel")) {
 	case "fatal":
 		logger.(*GoSNMPServer.DefaultLogger).Level = logrus.FatalLevel
@@ -59,7 +66,7 @@ func runServer(c *cli.Context) error {
 		Logger: logger,
 		SecurityConfig: GoSNMPServer.SecurityConfig{
 			AuthoritativeEngineBoots: 1,
-			SnmpV3Only:                   c.Bool("v3Only"),
+			SnmpV3Only:               c.Bool("v3Only"),
 			Users: []gosnmp.UsmSecurityParameters{
 				{
 					UserName:                 c.String("v3Username"),
@@ -76,9 +83,15 @@ func runServer(c *cli.Context) error {
 				OIDs:         mibImps.All(),
 			},
 		},
+		Snmp: &gosnmp.GoSNMP{
+			// Target: host,
+			// Port:   uint16(portConv),
+			Community: c.String("community"),
+			Version:   gosnmp.Version2c,
+			Timeout:   time.Duration(time.Second * 3),
+			Retries:   0,
+		},
 	}
-
-
 
 	logger.Infof("V3 Users:")
 	for _, val := range master.SecurityConfig.Users {
@@ -92,10 +105,19 @@ func runServer(c *cli.Context) error {
 		)
 	}
 	server := GoSNMPServer.NewSNMPServer(master)
-	err := server.ListenUDP("udp", c.String("bindTo"))
-	if err != nil {
-		logger.Errorf("Error in listen: %+v", err)
+	if c.Bool("quicMode") {
+		err := server.ListenQUIC(c.String("bindTo"), GoSNMPServer.GenerateTLSConfig(c.String("certPEM"), c.String("keyPEM")), c.String("log"))
+		if err != nil {
+			logger.Error("Error in listen: %+v", err)
+		}
+		// server.ServeForever()
+		return nil
+	} else {
+		err := server.ListenUDP("udp", c.String("bindTo"))
+		if err != nil {
+			logger.Errorf("Error in listen: %+v", err)
+		}
+		server.ServeForever()
+		return nil
 	}
-	server.ServeForever()
-	return nil
 }

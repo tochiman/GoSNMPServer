@@ -76,3 +76,8 @@ cpu.out
 mem.out
 gosnmp.test
 gosnmpserver
+
+# Certificate files (for QUIC)
+cert/
+
+snmp-server.log

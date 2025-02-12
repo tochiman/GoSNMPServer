@@ -26,6 +26,8 @@ type MasterAgent struct {
 		communityToSubAgent map[string]*SubAgent
 		defaultSubAgent     *SubAgent
 	}
+
+	Snmp *gosnmp.GoSNMP
 }
 
 type SecurityConfig struct {
@@ -131,6 +133,11 @@ func (t *MasterAgent) ResponseForBuffer(i []byte) ([]byte, error) {
 	vhandle.SecurityParameters = mb
 	request, decodeError := vhandle.SnmpDecodePacket(i)
 
+	pdus := []gosnmp.SnmpPDU{}
+	for _, vb := range request.Variables {
+		pdus = append(pdus, vb)
+	}
+
 	switch request.Version {
 	case gosnmp.Version1, gosnmp.Version2c:
 		if t.SecurityConfig.SnmpV3Only {
@@ -160,25 +167,23 @@ func (t *MasterAgent) ResponseForBuffer(i []byte) ([]byte, error) {
 			return nil, err
 		}
 
-		if !t.SecurityConfig.NoSecurity{
+		if !t.SecurityConfig.NoSecurity {
 			// https://pkg.go.dev/github.com/gosnmp/gosnmp#SnmpV3MsgFlags
 			userAuthMode := gosnmp.NoAuthNoPriv
 
-
 			if usm.AuthenticationProtocol > gosnmp.NoAuth {
-					userAuthMode = gosnmp.AuthNoPriv
+				userAuthMode = gosnmp.AuthNoPriv
 			}
-
 
 			if usm.PrivacyProtocol > gosnmp.NoPriv {
-					userAuthMode = gosnmp.AuthPriv
+				userAuthMode = gosnmp.AuthPriv
 			}
 
-			requestAuthMode := request.MsgFlags&gosnmp.AuthPriv /*3*/ 
+			requestAuthMode := request.MsgFlags & gosnmp.AuthPriv /*3*/
 
 			if requestAuthMode != gosnmp.SnmpV3MsgFlags(userAuthMode) {
-				return nil, 
-					errors.WithMessagef(ErrNoPermission, 
+				return nil,
+					errors.WithMessagef(ErrNoPermission,
 						"user %v required %v, got %v", username, userAuthMode.String(), request.MsgFlags.String())
 			}
 		}
@@ -323,7 +328,7 @@ func (t *MasterAgent) findForSubAgent(community string) *SubAgent {
 			return t.priv.defaultSubAgent
 		}
 		return nil
-	} 
+	}
 }
 
 func DefaultAuthoritativeEngineID() SNMPEngineID {

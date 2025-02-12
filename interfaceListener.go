@@ -1,7 +1,12 @@
 package GoSNMPServer
 
-import "net"
-import "github.com/pkg/errors"
+import (
+	"net"
+	"strconv"
+
+	"github.com/gosnmp/gosnmp"
+	"github.com/pkg/errors"
+)
 
 type ISnmpServerListener interface {
 	SetupLogger(ILogger)
@@ -16,13 +21,15 @@ type IReplyer interface {
 }
 
 type UDPListener struct {
-	conn   *net.UDPConn
-	logger ILogger
+	conn       *net.UDPConn
+	logger     ILogger
+	snmpserver *gosnmp.GoSNMP
 }
 
-func NewUDPListener(l3proto, address string) (ISnmpServerListener, error) {
+func NewUDPListener(l3proto, address string, server *gosnmp.GoSNMP) (ISnmpServerListener, error) {
 	ret := new(UDPListener)
 	ret.logger = NewDiscardLogger()
+	ret.snmpserver = server
 	udpaddr, err := net.ResolveUDPAddr(l3proto, address)
 	if err != nil {
 		return nil, errors.Wrap(err, "ResolveUDPAddr Error")
@@ -52,6 +59,38 @@ func (udp *UDPListener) NextSnmp() ([]byte, IReplyer, error) {
 		return nil, nil, errors.Wrap(err, "UDP Read Error")
 	}
 	udp.logger.Infof("udp request from %v. size=%v", udpAddr, counts)
+
+	host, port, err := net.SplitHostPort(udpAddr.String())
+	if err != nil {
+		return nil, nil, errors.Wrap(err, "SplitHostPort Error")
+	}
+	portConv, err := strconv.Atoi(port)
+	if err != nil {
+		return nil, nil, errors.Wrap(err, "[QUIC]Strconv.Atoi Error")
+	}
+
+	udp.snmpserver.Target = host
+	udp.snmpserver.Port = uint16(portConv)
+
+	// g := &gosnmp.GoSNMP{
+	// 	Target:    host,
+	// 	Port:      uint16(portConv),
+	// 	Community: "public",
+	// 	Version:   gosnmp.Version2c,
+	// 	Timeout:   time.Duration(time.Second * 3),
+	// 	Retries:   0,
+	// }
+
+	sP, err := udp.snmpserver.SnmpDecodePacket(msg[:counts])
+	if err != nil {
+		return nil, nil, errors.Wrap(err, "SNMPDecodePacket Error")
+	}
+	var oids []string
+	for _, vb := range sP.Variables {
+		oids = append(oids, vb.Name)
+	}
+	udp.logger.Infof("udp request: %v", oids)
+
 	return msg[:counts], &UDPReplyer{udpAddr, udp.conn}, nil
 }
 
